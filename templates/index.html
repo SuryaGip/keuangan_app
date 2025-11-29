@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="id">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Dompet Ku | Dashboard</title>
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        
+        <style>
+            /* Font Comic Sans yang tadi */
+            body, .btn, .form-control, .navbar, h1, h2, h3, h4, h5, h6 {
+                font-family: "Comic Sans MS", "Comic Sans", cursive !important;
+            }
+
+            /* CSS BARU: Untuk efek sensor/blur */
+            .sensor-aktif {
+                filter: blur(6px); /* Memburamkan teks */
+                user-select: none; /* Agar teks tidak bisa diblok/copy */
+                transition: 0.3s;
+                cursor: pointer;
+            }
+        </style>
+    </head>
+<body class="bg-light d-flex flex-column min-vh-100">
+
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
+    <div class="container">
+        <div>
+            <a class="navbar-brand" href="#">{{ sapaan }}, {{ user_name }}!</a>
+            <div class="text-white-50" style="font-size: 0.8rem; margin-top: -5px;">
+                "{{ quote }}"
+            </div>
+        </div>
+        
+        <div class="ms-auto d-flex gap-2">
+            <a href="/export" class="btn btn-success btn-sm">📥 Download Data</a>
+            <a href="/logout" class="btn btn-outline-danger btn-sm">Logout</a>
+        </div>
+    </div>
+</nav>
+
+<div class="container mb-5">
+    
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <form action="/" method="GET" class="d-flex gap-2">
+                <input type="text" name="q" class="form-control" placeholder="Cari transaksi (misal: bensin)..." value="{{ q }}">
+                <select name="filter" class="form-select w-auto" onchange="this.form.submit()">
+                    <option value="all" {{ 'selected' if filter_bulan == 'all' else '' }}>Semua Waktu</option>
+                    <option value="this_month" {{ 'selected' if filter_bulan == 'this_month' else '' }}>Bulan Ini</option>
+                </select>
+                <button type="submit" class="btn btn-primary">Cari</button>
+            </form>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body py-2">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <strong>Target Budget: Rp {{ "{:,.0f}".format(budget) }}</strong>
+                        <button class="btn btn-sm btn-link" data-bs-toggle="collapse" data-bs-target="#editBudget">Ubah</button>
+                    </div>
+                    
+                    {% set persen = (pengeluaran / budget * 100) if budget > 0 else 0 %}
+                    {% set warna = 'success' if persen < 50 else 'warning' if persen < 90 else 'danger' %}
+                    
+                    <div class="progress" style="height: 20px;">
+                        <div class="progress-bar bg-{{ warna }}" role="progressbar" style="width: {{ persen }}%;">
+                            {{ "{:.1f}".format(persen) }}%
+                        </div>
+                    </div>
+                    <small class="text-muted">Pengeluaran: Rp {{ "{:,.0f}".format(pengeluaran) }}</small>
+                    
+                    <div class="collapse mt-2" id="editBudget">
+                        <form action="/set_budget" method="POST" class="d-flex gap-2">
+                            <input type="number" name="budget" class="form-control form-control-sm" placeholder="Set Budget Baru" required>
+                            <button type="submit" class="btn btn-sm btn-primary">Simpan</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+        
+    <div class="d-flex justify-content-end mb-2">
+            <button class="btn btn-outline-dark btn-sm rounded-pill px-3" onclick="toggleSensor()">
+                <i id="iconMata" class="bi bi-eye"></i> 
+                <span id="textTombol">Sembunyikan Saldo</span>
+            </button>
+        </div>
+        <div class="row mb-4 text-center">
+            <div class="col-md-4">
+                <div class="card text-white bg-success mb-3 shadow-sm">
+                    <div class="card-header">Pemasukan</div>
+                    <div class="card-body">
+                        <h3 class="card-title">
+                            Rp <span class="uang-rahasia" data-asli="{{ "{:,.0f}".format(pemasukan) }}">{{ "{:,.0f}".format(pemasukan) }}</span>
+                        </h3>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card text-white bg-danger mb-3 shadow-sm">
+                    <div class="card-header">Pengeluaran</div>
+                    <div class="card-body">
+                        <h3 class="card-title">
+                            Rp <span class="uang-rahasia" data-asli="{{ "{:,.0f}".format(pengeluaran) }}">{{ "{:,.0f}".format(pengeluaran) }}</span>
+                        </h3>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card text-white bg-primary mb-3 shadow-sm">
+                    <div class="card-header">Saldo Akhir</div>
+                    <div class="card-body">
+                        <h3 class="card-title">
+                            Rp <span class="uang-rahasia" data-asli="{{ "{:,.0f}".format(saldo) }}">{{ "{:,.0f}".format(saldo) }}</span>
+                        </h3>
+                    </div>
+                </div>
+            </div>
+        </div>
+    <div class="row">
+        <div class="col-md-4 mb-4">
+            <div class="card">
+                <div class="card-header">Tambah Transaksi</div>
+                <div class="card-body">
+                    <form action="{{ url_for('add_transaction') }}" method="POST">
+                        <div class="mb-3">
+                            <label class="mb-2">Jenis Transaksi</label>
+                            <div class="d-flex gap-2">
+                                <input type="radio" class="btn-check" name="jenis" id="btn-pengeluaran" value="Pengeluaran" checked>
+                                <label class="btn btn-outline-danger w-50" for="btn-pengeluaran">
+                                    ⬇️ Pengeluaran
+                                </label>
+
+                                <input type="radio" class="btn-check" name="jenis" id="btn-pemasukan" value="Pemasukan">
+                                <label class="btn btn-outline-success w-50" for="btn-pemasukan">
+                                    ⬆️ Pemasukan
+                                </label>
+                            </div>
+                        </div><div class="mb-3">
+                            <label>Tanggal & Jam</label>
+                            <input type="datetime-local" name="tanggal_custom" class="form-control" step="1">
+                            <small class="text-muted text-small" style="font-size: 0.8em;">*Kosongkan jika transaksi terjadi SAAT INI.</small>
+                        </div>
+                        <div class="mb-3">
+                            <label>Kategori</label>
+                            <input type="text" name="kategori" id="kategoriInput" class="form-control" required>
+                            <div class="mt-2 d-flex flex-wrap gap-1">
+                                <button type="button" class="btn btn-sm btn-outline-dark" onclick="setKategori('Makan')">Makan</button>
+                                <button type="button" class="btn btn-sm btn-outline-dark" onclick="setKategori('Minuman')">Minuman</button>
+                                <button type="button" class="btn btn-sm btn-outline-dark" onclick="setKategori('Makan Dan Minuman')">Makan & Minuman</button>
+                                <button type="button" class="btn btn-sm btn-outline-dark" onclick="setKategori('Bensin')">Bensin</button>
+                                <button type="button" class="btn btn-sm btn-outline-dark" onclick="setKategori('Pakir')">Pakir</button>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label>Nominal (Rp)</label><input type="text" name="nominal" id="nominalInput" class="form-control" 
+                                placeholder="0" required onkeyup="formatRupiah(this)">
+                            <div class="mt-2 d-flex flex-wrap gap-1">
+                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setNominal(2000)">2rb</button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setNominal(5000)">5rb</button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setNominal(10000)">10rb</button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setNominal(50000)">50rb</button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setNominal(100000)">100rb</button>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label>Keterangan</label>
+                            <textarea name="keterangan" class="form-control"></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-dark w-100">Simpan</button>
+                    </form>
+                </div>
+            </div>
+            
+             <div class="card mt-4">
+                <div class="card-body">
+                    <canvas id="financeChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">Riwayat Transaksi</div>
+                <div class="card-body">
+                    {% if transaksi %}
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Tanggal</th>
+                                <th>Ket</th>
+                                <th>Nominal</th>
+                                <th>Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for t in transaksi %}
+                            <tr class="{{ 'table-success' if t.jenis == 'Pemasukan' else 'table-danger' }}">
+                                <td>
+                                    <small>{{ t.tanggal[:10] }}</small><br>
+                                    <strong>{{ t.kategori }}</strong>
+                                </td>
+                                <td>{{ t.keterangan }}</td>
+                                <td>Rp {{ "{:,.0f}".format(t.nominal) }}</td>
+                                <td>
+                                    <a href="/edit/{{ t.id }}" class="btn btn-sm btn-warning">✏️</a>
+                                    <a href="/delete/{{ t.id }}" class="btn btn-sm btn-danger" onclick="return confirm('Hapus?')">🗑️</a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    {% else %}
+                    <p class="text-center text-muted mt-3">Tidak ada data ditemukan.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<footer class="bg-dark text-white mt-auto pt-4 pb-2">
+    <div class="container">
+        <div class="row">
+            <div class="col-md-4 mb-3">
+                <h5 class="text-uppercase text-warning">💰 Dompet Ku @ {{ user_name }}</h5>
+                <p class="small text-white-50">
+                    Kelola keuanganmu dengan santai. 
+                    Catat pemasukan, pantau pengeluaran, 
+                    dan capai target tabunganmu!
+                </p>
+            </div>
+
+            <div class="col-md-4 mb-3">
+                <h5 class="text-uppercase text-warning">Menu Cepat</h5>
+                <ul class="list-unstyled">
+                    <li><a href="/" class="text-white text-decoration-none hover-link">🏠 Dashboard</a></li>
+                    <li><a href="/export" class="text-white text-decoration-none hover-link">📥 Download Laporan</a></li>
+                    <li><a href="/logout" class="text-danger text-decoration-none hover-link">🚪 Logout</a></li>
+                </ul>
+            </div>
+
+            <div class="col-md-4 mb-3">
+                <h5 class="text-uppercase text-warning">ABOUT</h5>
+                <p class="small text-white-50">
+                    Dibuat oleh Damianus Surya Handika
+                </p>
+                <div>
+                    <a href="https://lynk.id/damianussurya" class="badge bg-primary">LYNK</a>
+                    <a href="https://tiktok.com/@damianussurya" class="badge bg-primary">TikTok</a>
+                    <a href="https://instagram.com/@mansur_3" class="badge bg-primary">Instagram</a>
+                </div>
+            </div>
+        </div>
+
+        <hr class="border-secondary">
+
+        <div class="row">
+            <div class="col-md-6 text-center text-md-start">
+                <p class="small text-white-50 mb-0">
+                    &copy; <span id="year"></span> DompetKu by DshStudio. All rights reserved.
+                </p>
+            </div>
+            <div class="col-md-6 text-center text-md-end">
+                <p class="small text-white-50 mb-0">
+                    Didesain Spesial untuk Kamu ✨Versi 2.1
+                </p>
+            </div>
+        </div>
+    </div>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    function setNominal(val) { document.getElementById('nominalInput').value = val; }
+    function setKategori(val) { document.getElementById('kategoriInput').value = val; }
+    
+    const ctx = document.getElementById('financeChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Pemasukan', 'Pengeluaran'],
+            datasets: [{
+                data: [{{ pemasukan }}, {{ pengeluaran }}],
+                backgroundColor: ['#198754', '#dc3545']
+            }]
+        }
+    });
+
+    // --- LOGIKA SENSOR SALDO ---// --- LOGIKA SENSOR M-BANKING ---
+    
+    // Cek memori browser
+    let isHidden = localStorage.getItem('saldoHidden') === 'true';
+    
+    updateTampilanSensor();
+
+    function toggleSensor() {
+        isHidden = !isHidden;
+        localStorage.setItem('saldoHidden', isHidden);
+        updateTampilanSensor();
+    }
+
+    function updateTampilanSensor() {
+        const elemenUang = document.querySelectorAll('.uang-rahasia');
+        const iconMata = document.getElementById('iconMata');
+        const textTombol = document.getElementById('textTombol');
+        
+        elemenUang.forEach(el => {
+            if (isHidden) {
+                // TAMPILAN DISENSOR (*******)
+                el.innerText = "*******";
+            } else {
+                // TAMPILAN ASLI (Ambil dari data-asli)
+                el.innerText = el.getAttribute('data-asli');
+            }
+        });
+
+        // Ganti Icon & Teks Tombol
+        if (isHidden) {
+            // Icon Mata Dicoret (Slash)
+            iconMata.className = "bi bi-eye-slash"; 
+            textTombol.innerText = "Tampilkan Saldo";
+        } else {
+            // Icon Mata Terbuka
+            iconMata.className = "bi bi-eye"; 
+            textTombol.innerText = "Sembunyikan Saldo";
+        }
+    }
+    // --- FITUR FORMAT RUPIAH LIVE ---
+    function formatRupiah(element) {
+        // Ambil nilai asli, buang semua karakter yang bukan angka
+        let angka = element.value.replace(/[^,\d]/g, '').toString();
+        let split = angka.split(',');
+        let sisa = split[0].length % 3;
+        let rupiah = split[0].substr(0, sisa);
+        let ribuan = split[0].substr(sisa).match(/\d{3}/gi);
+
+        if (ribuan) {
+            let separator = sisa ? '.' : '';
+            rupiah += separator + ribuan.join('.');
+        }
+
+        rupiah = split[1] != undefined ? rupiah + ',' + split[1] : rupiah;
+        element.value = rupiah;
+    }
+    
+    // Update tombol cepat (5rb, 10rb) agar formatnya juga ikut ada titiknya
+    function setNominal(nilai) {
+        // Format nilai angka menjadi format ribuan (10.000)
+        let formatted = nilai.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+        document.getElementById('nominalInput').value = formatted;
+    }
+</script>
+
+</body>
+</html>
